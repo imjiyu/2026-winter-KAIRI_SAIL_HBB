@@ -61,7 +61,7 @@ This project aims to quantitatively answer the following three questions.
 Given a model $M$, consider a set of attention heads defined by their layer and head indices
 
 $$
-S = \{(l_1, h_1), \ldots, (l_k, h_k)\}
+S = \\{(l_1, h_1), \ldots, (l_k, h_k)\\}
 $$
 
 This study aims to answer the following question:
@@ -72,6 +72,171 @@ This study aims to answer the following question:
 To address this question, we perform interventions on the hidden representations of selected attention heads and analyze the resulting changes in the model’s output distribution. 
 
 Rather than focusing on individual prompt pairs, the analysis evaluates whether similar output changes repeatedly occur across multiple prompts within the same category. Consistent patterns of change across the dataset are interpreted as evidence that the attention head set plays a functional role in the model’s prediction process.
+
+### 2.2 Input / Output Format
+
+**[ Input Format ]**
+
+The input data for the experiment consists of prompt files in `.jsonl` format.  
+Each line contains a prompt in the following structure: `{"prompt": "..."}`
+
+Prompts are grouped by category according to the dataset directory structure. Each dataset file contains only the prompt text, while metadata such as the prompt category and source file are automatically inferred by the experiment code from the dataset directory structure.
+
+Therefore, during the experiment each prompt instance $x_i$ is associated with the following information:
+
+- **prompt text** $x_i$
+- **category** $c_i$
+- **source file** $s_i$
+
+For each prompt $x_i$, the model produces a probability distribution over the vocabulary for the next token:
+
+$p(x_i) = \text{softmax}(z(x_i))$
+
+where $z(x_i)$ represents the logits at the final token position.
+
+The **baseline token** for prompt $x_i$ is defined as the token with the highest probability:
+
+$t_{base}(x_i) = \arg\max_{v \in V} p_v(x_i)$
+
+This baseline prediction serves as the reference output used to evaluate the effect of head interventions.
+
+**[ Output Format ]**
+
+The experiment results are saved in both **`.jsonl` and `.csv` formats**, containing the same information.  
+The outputs consist of three primary files:
+
+1. **prompt_by_head**
+
+   Records probability changes and related statistics for each prompt under every attention head intervention.  
+   This file provides detailed information about how a specific head intervention affects the prediction probability for each prompt.
+
+2. **prompt_output_map**
+
+   Stores the baseline prediction results and the model outputs before any intervention for each prompt.  
+   This includes the prompt text, the top-1 token predicted by the model in the baseline condition, and the probability of that token.
+
+3. **summary_by_head**
+
+   Provides aggregated statistics for each attention head across multiple prompts.  
+   Only layer–head pairs that satisfy all predefined evaluation criteria are recorded.  
+   These heads are considered potential **topic-related attention heads** that may perform functional roles associated with specific topics or patterns.
+
+The precise definitions of the evaluation metrics included in these outputs are described in **Section 2.4 (Evaluation Metrics)** and **Section 6 Appendix – “Identifying Topic-Related Attention Heads.”**
+
+### 2.3 Intervention Mechanism
+
+To measure the causal influence of attention heads, the framework performs an intervention on the hidden representations corresponding to specific heads.
+
+Let the hidden representation entering the attention output projection at layer $l$ be
+
+$h^{(l)}(x_i) \in \mathbb{R}^d$
+
+where $d$ is the model hidden dimension.  
+If the model contains $H$ attention heads, the dimensionality of each head is
+
+$d_h = d / H$
+
+The slice corresponding to head $h$ is therefore defined as
+
+$h^{(l,h)}(x_i) = h^{(l)}(x_i)[h \cdot d_h : (h+1) \cdot d_h]$
+
+For each target prompt $x_i$, a **donor prompt** $x_j$ is selected from the same dataset bucket.  
+In the current implementation, the donor prompt is chosen as the **next prompt in the dataset**, which can be written as
+
+$x_j = x_{(i+1)\bmod N}$
+
+where $N$ is the number of prompts in the bucket.
+
+The intervention replaces the head representation of the target prompt with that of the donor prompt.  
+This replacement is applied **only at the last token position**.
+
+$h^{(l,h)}(x_i) \leftarrow h^{(l,h)}(x_j)$
+
+This operation constitutes **activation patching**, allowing us to observe how substituting a specific head representation changes the model's output distribution.
+
+### 2.4 Evaluation Metrics
+
+The effect of an intervention is evaluated through **changes in the output probability distribution**.
+
+For a prompt $x_i$, the **baseline top-1 token** is defined as
+
+$t_b = t_{base}(x_i)$
+
+Let $p'(x_i; S)$ denote the probability distribution after intervening on a set of heads $S$.
+
+
+**[1] Baseline Degradation**
+
+The change in the probability of the baseline token is defined as
+
+\[
+\Delta_{base}(i; S) = p'_{t_b}(x_i; S) - p_{t_b}(x_i)
+\]
+
+Using this quantity, the **ratio of prompts where the baseline token probability decreases** is defined as
+
+\[
+R_{base}^{\downarrow}(S) =
+\frac{1}{N}
+\sum_{i=1}^{N}
+\mathbf{1}[\Delta_{base}(i;S) < 0]
+\]
+
+We also measure the **ratio of prompts where the top-1 prediction itself changes after intervention**:
+
+\[
+R_{change}(S) =
+\frac{1}{N}
+\sum_{i=1}^{N}
+\mathbf{1}[\arg\max p'(x_i;S) \ne t_b]
+\]
+
+**[2] Donor Token Injection**
+
+Let the baseline token of the donor prompt be
+
+$t_d = t_{base}(x_j)$
+
+The change in the probability of the donor token is defined as
+
+\[
+\Delta_{donor}(i; S) =
+p'_{t_d}(x_i;S) - p_{t_d}(x_i)
+\]
+
+Using this value, the **ratio of prompts where the donor token probability increases** is defined as
+
+\[
+R_{donor}^{\uparrow}(S) =
+\frac{1}{N}
+\sum_{i=1}^{N}
+\mathbf{1}[\Delta_{donor}(i;S) > 0]
+\]
+
+** [3] Head Selection **
+
+An attention head is selected as a **meaningful candidate head** when it satisfies all of the following conditions:
+
+- baseline token probability decrease ratio ≥ threshold  
+  - `base_token_prob_decrease_ratio`
+- donor token probability increase ratio ≥ threshold  
+  - `donor_token_prob_increase_ratio`
+- donor token rank up ratio ≥ threshold  
+  - `donor_token_rank_up_ratio`
+- mean baseline token probability change < threshold
+
+These conditions are designed to identify heads where the intervention **simultaneously degrades the baseline prediction while injecting donor information into the output distribution**.
+### 2.5 Model
+
+All experiments are conducted using the **EleutherAI Pythia-1.4B causal language model**. The model consists of **24 transformer layers**, each containing **16 attention heads**, resulting in **384 attention heads in total**.
+
+The intervention point is the **hidden representation entering the attention output projection (`attention.dense`)** at each layer.  
+At this point, the hidden slice corresponding to a specific head is **replaced with the corresponding slice from a donor prompt**, which constitutes the **activation patching** operation.
+This activation patching procedure is used to **measure the causal influence of each attention head** on the model’s output.
+
+Although the framework is validated on **Pythia-1.4B**, it is **not model-specific**. It can be applied to **any model following the standard Transformer architecture with multi-head self-attention**, provided that **layer-wise hidden representations of individual attention heads are accessible**.
+
+<br>
 
 ## 3. Main Figure
 
