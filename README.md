@@ -56,6 +56,23 @@ This project aims to quantitatively answer the following three questions.
 
 ## 2. Task Definition 
 
+### 2.1 Problem Statement
+
+Given a model $M$, consider a set of attention heads defined by their layer and head indices
+
+$$
+S = \{(l_1, h_1), \ldots, (l_k, h_k)\}
+$$
+
+This study aims to answer the following question:
+
+> **Does the head set $S$ causally contribute to the model’s next-token prediction?**  
+> If so, **does this contribution appear consistently across prompts within a specific prompt category?**
+
+To address this question, we perform interventions on the hidden representations of selected attention heads and analyze the resulting changes in the model’s output distribution. 
+
+Rather than focusing on individual prompt pairs, the analysis evaluates whether similar output changes repeatedly occur across multiple prompts within the same category. Consistent patterns of change across the dataset are interpreted as evidence that the attention head set plays a functional role in the model’s prediction process.
+
 ## 3. Main Figure
 
 ## 4. Results
