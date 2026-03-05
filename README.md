@@ -73,6 +73,8 @@ To address this question, we perform interventions on the hidden representations
 
 Rather than focusing on individual prompt pairs, the analysis evaluates whether similar output changes repeatedly occur across multiple prompts within the same category. Consistent patterns of change across the dataset are interpreted as evidence that the attention head set plays a functional role in the model’s prediction process.
 
+<br>
+
 ### 2.2 Input / Output Format
 
 **[ Input Format ]**
@@ -90,13 +92,17 @@ Therefore, during the experiment each prompt instance $x_i$ is associated with t
 
 For each prompt $x_i$, the model produces a probability distribution over the vocabulary for the next token:
 
-$p(x_i) = \text{softmax}(z(x_i))$
+$$
+p(x_i) = \text{softmax}(z(x_i))
+$$  
 
-where $z(x_i)$ represents the logits at the final token position.
+where $z(x_i)$ represents the logits at the final token position.  
 
 The **baseline token** for prompt $x_i$ is defined as the token with the highest probability:
 
-$t_{base}(x_i) = \arg\max_{v \in V} p_v(x_i)$
+$$
+t_{base}(x_i) = \arg\max_{v \in V} p_v(x_i)
+$$  
 
 This baseline prediction serves as the reference output used to evaluate the effect of head interventions.
 
@@ -123,36 +129,52 @@ The outputs consist of three primary files:
 
 The precise definitions of the evaluation metrics included in these outputs are described in **Section 2.4 (Evaluation Metrics)** and **Section 6 Appendix – “Identifying Topic-Related Attention Heads.”**
 
+<br>
+
 ### 2.3 Intervention Mechanism
 
 To measure the causal influence of attention heads, the framework performs an intervention on the hidden representations corresponding to specific heads.
 
 Let the hidden representation entering the attention output projection at layer $l$ be
 
-$h^{(l)}(x_i) \in \mathbb{R}^d$
+$$
+h^{(l)}(x_i) \in \mathbb{R}^d
+$$
 
 where $d$ is the model hidden dimension.  
+
 If the model contains $H$ attention heads, the dimensionality of each head is
 
-$d_h = d / H$
+$$
+d_h = d / H
+$$
 
 The slice corresponding to head $h$ is therefore defined as
 
-$h^{(l,h)}(x_i) = h^{(l)}(x_i)[h \cdot d_h : (h+1) \cdot d_h]$
+$$
+h^{(l,h)}(x_i) = h^{(l)}(x_i)[h \cdot d_h : (h+1) \cdot d_h]
+$$
 
 For each target prompt $x_i$, a **donor prompt** $x_j$ is selected from the same dataset bucket.  
+
 In the current implementation, the donor prompt is chosen as the **next prompt in the dataset**, which can be written as
 
-$x_j = x_{(i+1)\bmod N}$
+$$
+x_j = x_{(i+1)\bmod N}
+$$
 
 where $N$ is the number of prompts in the bucket.
 
 The intervention replaces the head representation of the target prompt with that of the donor prompt.  
 This replacement is applied **only at the last token position**.
 
-$h^{(l,h)}(x_i) \leftarrow h^{(l,h)}(x_j)$
+$$
+h^{(l,h)}(x_i) \leftarrow h^{(l,h)}(x_j)
+$$
 
 This operation constitutes **activation patching**, allowing us to observe how substituting a specific head representation changes the model's output distribution.
+
+<br>
 
 ### 2.4 Evaluation Metrics
 
@@ -160,72 +182,75 @@ The effect of an intervention is evaluated through **changes in the output proba
 
 For a prompt $x_i$, the **baseline top-1 token** is defined as
 
-$t_b = t_{base}(x_i)$
+$$
+t_b = t_{base}(x_i)
+$$
 
-Let $p'(x_i; S)$ denote the probability distribution after intervening on a set of heads $S$.
-
+Let $p'(x_i; S)$ denote the probability distribution after intervening on a set of heads $S$.  
 
 **[1] Baseline Degradation**
 
 The change in the probability of the baseline token is defined as
 
-\[
+$$
 \Delta_{base}(i; S) = p'_{t_b}(x_i; S) - p_{t_b}(x_i)
-\]
+$$
 
 Using this quantity, the **ratio of prompts where the baseline token probability decreases** is defined as
 
-\[
+$$
 R_{base}^{\downarrow}(S) =
 \frac{1}{N}
 \sum_{i=1}^{N}
 \mathbf{1}[\Delta_{base}(i;S) < 0]
-\]
+$$
 
 We also measure the **ratio of prompts where the top-1 prediction itself changes after intervention**:
 
-\[
+$$
 R_{change}(S) =
 \frac{1}{N}
 \sum_{i=1}^{N}
 \mathbf{1}[\arg\max p'(x_i;S) \ne t_b]
-\]
+$$  
 
 **[2] Donor Token Injection**
 
 Let the baseline token of the donor prompt be
 
-$t_d = t_{base}(x_j)$
+$$
+t_d = t_{base}(x_j)
+$$  
 
 The change in the probability of the donor token is defined as
 
-\[
+$$ 
 \Delta_{donor}(i; S) =
 p'_{t_d}(x_i;S) - p_{t_d}(x_i)
-\]
+$$  
 
 Using this value, the **ratio of prompts where the donor token probability increases** is defined as
 
-\[
+$$ 
 R_{donor}^{\uparrow}(S) =
 \frac{1}{N}
 \sum_{i=1}^{N}
 \mathbf{1}[\Delta_{donor}(i;S) > 0]
-\]
+$$  
 
-** [3] Head Selection **
+**[3] Head Selection**
 
 An attention head is selected as a **meaningful candidate head** when it satisfies all of the following conditions:
 
-- baseline token probability decrease ratio ≥ threshold  
-  - `base_token_prob_decrease_ratio`
-- donor token probability increase ratio ≥ threshold  
-  - `donor_token_prob_increase_ratio`
-- donor token rank up ratio ≥ threshold  
-  - `donor_token_rank_up_ratio`
+- baseline token probability decrease ratio ≥ threshold   (`base_token_prob_decrease_ratio`)  
+- donor token probability increase ratio ≥ threshold   (`donor_token_prob_increase_ratio`)  
+- donor token rank up ratio ≥ threshold   (`donor_token_rank_up_ratio`)  
 - mean baseline token probability change < threshold
 
 These conditions are designed to identify heads where the intervention **simultaneously degrades the baseline prediction while injecting donor information into the output distribution**.
+
+<br> 
+
 ### 2.5 Model
 
 All experiments are conducted using the **EleutherAI Pythia-1.4B causal language model**. The model consists of **24 transformer layers**, each containing **16 attention heads**, resulting in **384 attention heads in total**.
@@ -234,11 +259,30 @@ The intervention point is the **hidden representation entering the attention out
 At this point, the hidden slice corresponding to a specific head is **replaced with the corresponding slice from a donor prompt**, which constitutes the **activation patching** operation.
 This activation patching procedure is used to **measure the causal influence of each attention head** on the model’s output.
 
-Although the framework is validated on **Pythia-1.4B**, it is **not model-specific**. It can be applied to **any model following the standard Transformer architecture with multi-head self-attention**, provided that **layer-wise hidden representations of individual attention heads are accessible**.
+Although the framework is validated on **Pythia-1.4B**, it is **not model-specific**. It can be applied to **any model following the standard Transformer architecture with multi-head self-attention**, provided that **layer-wise hidden representations of individual attention heads are accessible**.  
+
+<br>  
+
+## 3. Main Figure  
+
+Figure [ X ] presents an interactive visualization of the Attention Head Coverage results.
+
+Rows correspond to **Transformer layers**, and columns correspond to **attention head indices**.  
+Each cell represents a specific attention head $(l,h)$ in the model.
+
+Heads that show significant effects for a particular prompt category are highlighted using **color-coded labels** within the grid.
+
+The left panel summarizes discovered head groups, including:
+
+- detected **semantic categories**
+- the number of **attention heads associated with each category**
+- a short **description of the role of those heads**
+
+Categories are color-coded, allowing users to quickly identify where heads related to specific concepts (e.g., math, country) are distributed across layers and heads.
+
+The visualization is provided through an **interactive web interface hosted via *vercel.app***.  
 
 <br>
-
-## 3. Main Figure
 
 ## 4. Results
 
