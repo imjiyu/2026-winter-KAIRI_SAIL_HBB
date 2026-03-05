@@ -26,31 +26,31 @@ Furthermore, instead of relying on a single pair of prompts, we measure **statis
 
 The core mechanism of Attention Head Coverage is **activation patching**. Each experiment proceeds in three stages:
 
- 1) **Baseline Measurement**
+ 1. **Baseline Measurement**
 
     Each prompt is fed into the model, and the **baseline top-1 token** of the next-token prediction along with its probability is recorded.
 
- 2) **Intervention**
+ 2. **Intervention**
 
     The hidden representation of a specific layer/head (more precisely, the **head slice of the `attention.dense` input**) is **replaced** with the corresponding head slice from a donor prompt.
 
- 3) **Effect Measurement**
+ 3. **Effect Measurement**
 
     The change in output probabilities before and after the replacement is quantified in two directions:
        - decrease in the probability of the baseline top-1 token
        - increase in the probability of the donor prompt’s top-1 token
-
-   These changes are measured to evaluate the influence of the head.
+    
+    These changes are measured to evaluate the influence of the head.
 
 ### Research Questions
 
 This project aims to quantitatively answer the following three questions.
 
-  **Q1. Disruption** - When a specific head is patched, **to what extent does the baseline prompt’s top-1 prediction collapse?**
+ - **Q1. Disruption** - When a specific head is patched, **to what extent does the baseline prompt’s top-1 prediction collapse?**
   
-  **Q2. Injection** - At the same time, **to what extent is the donor prompt’s top-1 prediction injected into the output?**
+ - **Q2. Injection** - At the same time, **to what extent is the donor prompt’s top-1 prediction injected into the output?**
 
-  **Q3. Coverage** - **Is this phenomenon consistently reproduced across a large portion of the dataset within a specific category?**
+ - **Q3. Coverage** - **Is this phenomenon consistently reproduced across a large portion of the dataset within a specific category?**
 
 <br>
 
